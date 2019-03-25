@@ -9,6 +9,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 
@@ -99,6 +100,9 @@ public class MainActivity extends Activity  implements CvCameraViewListener2 {
                     Log.i(TAG, "OpenCV loaded successfully");
                     mOpenCvCameraView.enableView();
                     mOpenCvCameraView.setMainActivity(MainActivity.this);
+                    desc2List = new LinkedList<Mat>();
+                    prevNames = new LinkedList<String>();
+                //    descriptors2 = new Mat();
                    // mOpenCvCameraView.setOnTouchListener(MainActivity.this);
                 } break;
                 default:
@@ -302,13 +306,18 @@ public class MainActivity extends Activity  implements CvCameraViewListener2 {
         return destImageData;
     }
 
+    private Mat descriptors1 = null;
+    private Mat descriptors2 = null;//new Mat();
+    private String name2 = "";
+    private LinkedList<Mat> desc2List = null;
+    private LinkedList<String> prevNames = null;
 
     private class ImageProcessor extends AsyncTask<byte[], Void, Bitmap> {
 
         byte[] imageData = null;
         Image mTargetImage = null;
 
-        private Mat descriptors1;
+
         private FeatureDetector detector;
         private DescriptorExtractor DescExtractor;
         private DescriptorMatcher matcher;
@@ -350,55 +359,60 @@ public class MainActivity extends Activity  implements CvCameraViewListener2 {
             //////////OpenCV Image Processing/////////////////
 
             Mat img1 = new Mat();
+            Mat img2 = new Mat();
             Utils.bitmapToMat(bitmap1, img1);
+            Utils.bitmapToMat(bitmap1, img2);
 
             Imgproc.cvtColor(img1, img1, Imgproc.COLOR_BGR2RGB);
-            detector = FeatureDetector.create(FeatureDetector.PYRAMID_FAST);
+            Imgproc.cvtColor(img2, img2, Imgproc.COLOR_BGR2RGB);
+            detector = FeatureDetector.create(FeatureDetector.ORB);
             DescExtractor = DescriptorExtractor.create(DescriptorExtractor.ORB);
             matcher = DescriptorMatcher
                     .create(DescriptorMatcher.BRUTEFORCE_HAMMING);
 
             keypoints1 = new MatOfKeyPoint();
             descriptors1 = new Mat();
-
             detector.detect(img1, keypoints1);
             Log.d("LOG!", "number of query Keypoints= " + keypoints1.size());
             // Descript keypoints
             DescExtractor.compute(img1, keypoints1, descriptors1);
 
-            int maxSimCount = 0;
+            int maxSimCount = 10000;
             String strSimName = "";
-            Bitmap matchedImg = null;
-            Cursor cursor = sql.dbGetAll();
-            while (cursor.moveToNext()) {
-                String name = cursor.getString(0);
-                int t = cursor.getInt(1);
-                int w = cursor.getInt(2);
-                int h = cursor.getInt(3);
-                byte[] p = cursor.getBlob(4);
-                Mat descriptors2 = new Mat(h, w, t);
-                // matching descriptors
-                matches = new MatOfDMatch();
-                matcher.match(descriptors1, descriptors2, matches);
-                Log.d("LOG!", "Matches Size " + matches.size());
-                // New method of finding best matches
-                List<DMatch> matchesList = matches.toList();
-                List<DMatch> matches_final = new ArrayList<DMatch>();
-                for (int i = 0; i < matchesList.size(); i++) {
-                    if (matchesList.get(i).distance <= 10) {
-                        matches_final.add(matches.toList().get(i));
-                    }
-                }
 
-                if (matches_final.size() >= 50) {
-                    if (matches_final.size() > maxSimCount) {
-                        strSimName = name;
+            matches = new MatOfDMatch();
+
+            for (int k = 0; k< desc2List.size(); k++) {
+                descriptors2 = desc2List.get(k);
+                if (descriptors2 != null) {
+                    matcher.match(descriptors1, descriptors2, matches);
+                    Log.d("LOG!", "Matches Size " + matches.size());
+                    // New method of finding best matches
+                    List<DMatch> matchesList = matches.toList();
+                    List<DMatch> matches_final = new ArrayList<DMatch>();
+                    Double max_dist = 0.0;
+                    Double min_dist = 100.0;
+
+                    for (int i = 0; i < matchesList.size(); i++) {
+                        Double dist = (double) matchesList.get(i).distance;
+                        if (dist < min_dist)
+                            min_dist = dist;
+                        if (dist > max_dist)
+                            max_dist = dist;
+                    }
+
+                    LinkedList<DMatch> good_matches = new LinkedList<DMatch>();
+                    for (int i = 0; i < matchesList.size(); i++) {
+                        if (matchesList.get(i).distance <= (1.5 * min_dist))
+                            good_matches.addLast(matchesList.get(i));
+                    }
+
+                    if (good_matches.size() < maxSimCount) {
+                        maxSimCount = good_matches.size();
+                        strSimName = prevNames.get(k);
                     }
                 }
             }
-            /*
-               ///////////////////////////////////////////////////////
-            */
 
             String fileName = Environment.getExternalStorageDirectory().getPath() +
                     "/" + FILENAME;
@@ -408,7 +422,8 @@ public class MainActivity extends Activity  implements CvCameraViewListener2 {
                 fos.write(imageResize);
                 fos.close();
 
-                sql.dbPutImg(FILENAME, descriptors1);
+                desc2List.addLast(descriptors1);
+                prevNames.addLast(FILENAME);
 
                 if (strSimName.length() > 0) {
                     String simPath = Environment.getExternalStorageDirectory().getPath() + "/" + strSimName;
