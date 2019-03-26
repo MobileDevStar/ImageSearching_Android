@@ -17,15 +17,13 @@
             android:id="@+id/button_imageView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:paddingTop="60sp"
-            android:paddingBottom="60sp"
-            android:paddingLeft="134sp"
-            android:paddingRight="134sp"
             android:background="@null"
-            android:layout_centerInParent="true"
+            android:paddingLeft="134sp"
+            android:paddingTop="60sp"
+            android:paddingRight="134sp"
+            android:paddingBottom="60sp"
             android:scaleType="centerCrop"
-            android:visibility="invisible"
-            />
+            android:visibility="invisible" />
         <Button
             android:id="@+id/button_capture"
             android:background="@drawable/capture"
@@ -36,6 +34,27 @@
             android:layout_centerVertical="true"
             android:textColor="#FFFFFF"
             android:textSize="30sp"
+            android:enabled="true"
             />
+
+        <CheckBox
+            android:id="@+id/chk_match"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:layout_above="@id/button_capture"
+            android:checked="false"
+            android:layout_alignParentRight="true"
+            android:layout_marginRight="5dp"
+            android:layout_marginBottom="20dp" />
+
+        <TextView
+            android:id="@+id/lb_match"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_above="@id/chk_match"
+            android:text="Taking"
+            android:layout_alignParentRight="true"
+            android:layout_marginRight="15dp"
+            android:layout_marginBottom="5dp" />
     </RelativeLayout>
 </RelativeLayout>

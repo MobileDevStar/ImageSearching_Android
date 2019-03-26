@@ -3,7 +3,9 @@ package com.anna.picturematching;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -72,7 +74,9 @@ import android.view.View;
 import android.view.View.OnTouchListener;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.ImageButton;
+import android.widget.TextView;
 import android.widget.Toast;
 
 
@@ -90,6 +94,14 @@ public class MainActivity extends Activity  implements CvCameraViewListener2 {
 
     private Button mCaptureButton;
     private ImageButton mImageView;
+    private TextView mLabelMatch;
+    private CheckBox mChkMatch;
+    private boolean mBlMatch = false;
+
+
+    private Mat                     mRgba;
+    private int                     mState = 0;
+    private Mat                     mCaptured;
 
     private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
@@ -140,8 +152,32 @@ public class MainActivity extends Activity  implements CvCameraViewListener2 {
             @Override
             public void onClick(View v) {
                 mImageView.setVisibility(View.INVISIBLE);
+                mState = 0;
+                mCaptureButton.setEnabled(false);
+                mCaptureButton.setBackground(getResources().getDrawable(R.drawable.capture_disabled));
             }
         });
+
+        mLabelMatch = (TextView) findViewById(R.id.lb_match);
+
+        mChkMatch = (CheckBox) findViewById(R.id.chk_match);
+        mChkMatch.setOnClickListener(new View.OnClickListener(){
+            @Override
+            public void onClick(View v) {
+                mBlMatch = !mBlMatch;
+                mChkMatch.setChecked(mBlMatch);
+                mCaptureButton.setEnabled(!mBlMatch);
+                if (mBlMatch) {
+                    mLabelMatch.setText(new String("Matching"));
+                    mCaptureButton.setBackground(getResources().getDrawable(R.drawable.capture_disabled));
+                } else {
+                    mImageView.setVisibility(View.INVISIBLE);
+                    mLabelMatch.setText(new String("Taking"));
+                    mCaptureButton.setBackground(getResources().getDrawable(R.drawable.capture));
+                }
+            }
+        });
+
 
         mOpenCvCameraView = (CameraView) findViewById(R.id.java_surface_view);
 
@@ -178,13 +214,26 @@ public class MainActivity extends Activity  implements CvCameraViewListener2 {
     }
 
     public void onCameraViewStarted(int width, int height) {
+        mRgba = new Mat(height, width, CvType.CV_8UC4);
+        mCaptured = new Mat(height, width, CvType.CV_8UC4);
     }
 
     public void onCameraViewStopped() {
+        mRgba.release();
+        mCaptured.release();
     }
 
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
-        return inputFrame.rgba();
+        mRgba = inputFrame.rgba();
+
+        if (mBlMatch) {
+            if (mState == 0) {
+                mState = 1;
+                new ImageMatcher().execute(mRgba);
+            }
+        }
+
+        return mRgba;
     }
 
     @Override
@@ -244,13 +293,14 @@ public class MainActivity extends Activity  implements CvCameraViewListener2 {
     }
 
     private void takePicture() {
+        mCaptured = mRgba;
         mOpenCvCameraView.takePicture();
     }
 
     @SuppressLint("SimpleDateFormat")
     public void showMatchedImage(byte[] imageData) {
 
-        new ImageProcessor(this).execute(imageData);
+        new ImageSaver(this).execute(imageData);
     }
     /*
      * Image modifiers
@@ -307,40 +357,134 @@ public class MainActivity extends Activity  implements CvCameraViewListener2 {
     }
 
     private Mat descriptors1 = null;
-    private Mat descriptors2 = null;//new Mat();
-    private String name2 = "";
     private LinkedList<Mat> desc2List = null;
     private LinkedList<String> prevNames = null;
 
-    private class ImageProcessor extends AsyncTask<byte[], Void, Bitmap> {
-
-        byte[] imageData = null;
-        Image mTargetImage = null;
-
+    private class ImageMatcher extends AsyncTask<Mat, Void, Bitmap> {
 
         private FeatureDetector detector;
         private DescriptorExtractor DescExtractor;
-        private DescriptorMatcher matcher;
         private MatOfKeyPoint keypoints1;
-        private MatOfDMatch matches, matches_final_mat;
 
-        private ProgressDialog pd;
-        private MainActivity asyncTaskContext=null;
-        private Scalar RED = new Scalar(255,0,0);
-        private Scalar GREEN = new Scalar(0,255,0);
+        @Override
+        protected Bitmap doInBackground(Mat... mats) {
 
-        public ImageProcessor (MainActivity context)
+            Mat curImage = mats[0];
+            Mat img1 = new Mat();
+
+            Imgproc.cvtColor(mCaptured, img1, Imgproc.COLOR_BGR2RGB);
+            detector = FeatureDetector.create(FeatureDetector.ORB);
+            DescExtractor = DescriptorExtractor.create(DescriptorExtractor.ORB);
+            DescriptorMatcher matcher = DescriptorMatcher
+                    .create(DescriptorMatcher.BRUTEFORCE_HAMMING);
+
+            keypoints1 = new MatOfKeyPoint();
+            descriptors1 = new Mat();
+            detector.detect(img1, keypoints1);
+            Log.d("LOG!", "number of query Keypoints= " + keypoints1.size());
+            // Descript keypoints
+            DescExtractor.compute(img1, keypoints1, descriptors1);
+
+            int minSimCount = 10000;
+            String strSimName = "";
+            MatOfDMatch matches = new MatOfDMatch();
+
+            for (int k = 0; k< desc2List.size(); k++) {
+                Mat descriptors2 = desc2List.get(k);
+                if (descriptors2 != null) {
+                    matcher.match(descriptors1, descriptors2, matches);
+                    Log.d("LOG!", "Matches Size " + matches.size());
+                    // New method of finding best matches
+                    List<DMatch> matchesList = matches.toList();
+                    List<DMatch> matches_final = new ArrayList<DMatch>();
+                    Double max_dist = 0.0;
+                    Double min_dist = 100.0;
+
+                    for (int i = 0; i < matchesList.size(); i++) {
+                        Double dist = (double) matchesList.get(i).distance;
+                        if (dist < min_dist)
+                            min_dist = dist;
+                        if (dist > max_dist)
+                            max_dist = dist;
+                    }
+
+                    LinkedList<DMatch> good_matches = new LinkedList<DMatch>();
+                    for (int i = 0; i < matchesList.size(); i++) {
+                        if (matchesList.get(i).distance <= (1.5 * min_dist))
+                            good_matches.addLast(matchesList.get(i));
+                    }
+
+                    if (good_matches.size() < minSimCount) {
+                        minSimCount = good_matches.size();
+                        strSimName = prevNames.get(k);
+                    }
+                }
+            }
+
+            if (strSimName.length() > 0 && minSimCount < 4) {
+                String simPath = Environment.getExternalStorageDirectory().getPath() + "/" + strSimName;
+                FileInputStream fin = null;
+                try {
+                    fin = new FileInputStream(new File(simPath));
+                    int imgLen = fin.available();
+                    byte[] matchData = new byte[imgLen];
+                    fin.read(matchData, 0, imgLen);
+                    fin.close();
+                    Log.e("++++++++++++++", strSimName);
+
+                    Bitmap image = BitmapFactory.decodeByteArray(matchData, 0, matchData.length);
+                    return image;
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Bitmap image) {
+            //  pd.dismiss();
+            if (image != null) {
+                mState = 2;
+                mImageView.setImageBitmap(image);
+                mImageView.setAlpha(156);
+                mImageView.setVisibility(View.VISIBLE);
+                mCaptureButton.setEnabled(true);
+                mCaptureButton.setBackground(getResources().getDrawable(R.drawable.capture));
+                Toast.makeText(MainActivity.this, "Matched", Toast.LENGTH_SHORT).show();
+            } else {
+                //Toast.makeText(MainActivity.this, "Cannot find a matched image", Toast.LENGTH_SHORT).show();
+                mState = 0;
+            }
+        }
+    }
+
+    private class ImageSaver extends AsyncTask<byte[], Void, Bitmap> {
+
+        byte[] imageData = null;
+
+        private FeatureDetector detector;
+        private DescriptorExtractor DescExtractor;
+        private MatOfKeyPoint keypoints1;
+
+
+        public ImageSaver (MainActivity context)
         {
-            asyncTaskContext=context;
+
         }
         @Override
         protected void onPreExecute() {
-            pd = new ProgressDialog(asyncTaskContext);
-            pd.setIndeterminate(true);
-            pd.setCancelable(true);
-            pd.setCanceledOnTouchOutside(false);
-            pd.setMessage("Processing...");
-            pd.show();
+//            pd = new ProgressDialog(asyncTaskContext);
+//            pd.setIndeterminate(true);
+//            pd.setCancelable(true);
+//            pd.setCanceledOnTouchOutside(false);
+//            pd.setMessage("Processing...");
+//            pd.show();
+            Toast.makeText(MainActivity.this, "saving...", Toast.LENGTH_SHORT).show();
         }
 
 
@@ -354,20 +498,14 @@ public class MainActivity extends Activity  implements CvCameraViewListener2 {
             byte[] imageResize = resizeImage(imageData, 640, 480);
             imageResize = addJPEGExifTagsFromSource(imageData, imageResize);
 
-            Bitmap bitmap1 = BitmapFactory.decodeByteArray(imageResize, 0, imageResize.length);
-
-            //////////OpenCV Image Processing/////////////////
+             //////////OpenCV Image Processing/////////////////
 
             Mat img1 = new Mat();
-            Mat img2 = new Mat();
-            Utils.bitmapToMat(bitmap1, img1);
-            Utils.bitmapToMat(bitmap1, img2);
 
-            Imgproc.cvtColor(img1, img1, Imgproc.COLOR_BGR2RGB);
-            Imgproc.cvtColor(img2, img2, Imgproc.COLOR_BGR2RGB);
+            Imgproc.cvtColor(mCaptured, img1, Imgproc.COLOR_BGR2RGB);
             detector = FeatureDetector.create(FeatureDetector.ORB);
             DescExtractor = DescriptorExtractor.create(DescriptorExtractor.ORB);
-            matcher = DescriptorMatcher
+            DescriptorMatcher matcher = DescriptorMatcher
                     .create(DescriptorMatcher.BRUTEFORCE_HAMMING);
 
             keypoints1 = new MatOfKeyPoint();
@@ -376,8 +514,8 @@ public class MainActivity extends Activity  implements CvCameraViewListener2 {
             Log.d("LOG!", "number of query Keypoints= " + keypoints1.size());
             // Descript keypoints
             DescExtractor.compute(img1, keypoints1, descriptors1);
-
-            int maxSimCount = 10000;
+/*
+             int minSimCount = 10000;
             String strSimName = "";
 
             matches = new MatOfDMatch();
@@ -407,13 +545,13 @@ public class MainActivity extends Activity  implements CvCameraViewListener2 {
                             good_matches.addLast(matchesList.get(i));
                     }
 
-                    if (good_matches.size() < maxSimCount) {
-                        maxSimCount = good_matches.size();
+                    if (good_matches.size() < minSimCount) {
+                        minSimCount = good_matches.size();
                         strSimName = prevNames.get(k);
                     }
                 }
             }
-
+*/
             String fileName = Environment.getExternalStorageDirectory().getPath() +
                     "/" + FILENAME;
 
@@ -424,8 +562,8 @@ public class MainActivity extends Activity  implements CvCameraViewListener2 {
 
                 desc2List.addLast(descriptors1);
                 prevNames.addLast(FILENAME);
-
-                if (strSimName.length() > 0) {
+/*
+                if (strSimName.length() > 0 && minSimCount < 4) {
                     String simPath = Environment.getExternalStorageDirectory().getPath() + "/" + strSimName;
                     FileInputStream fin = new FileInputStream(new File(simPath));
                     int imgLen = fin.available();
@@ -438,7 +576,7 @@ public class MainActivity extends Activity  implements CvCameraViewListener2 {
 
                     Bitmap image = BitmapFactory.decodeByteArray(matchData, 0, matchData.length);
                     return image;
-                }
+                }*/
             } catch (java.io.IOException e) {
                 Log.e("PictureDemo", "Exception in photoCallback", e);
             }
@@ -449,15 +587,16 @@ public class MainActivity extends Activity  implements CvCameraViewListener2 {
 
         @Override
         protected void onPostExecute(Bitmap image) {
-            pd.dismiss();
-            if (image != null) {
-                mImageView.setImageBitmap(image);
-                mImageView.setAlpha(156);
-                mImageView.setVisibility(View.VISIBLE);
-                Toast.makeText(MainActivity.this, "Matched", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(MainActivity.this, "saved", Toast.LENGTH_SHORT).show();
-            }
+          //  pd.dismiss();
+            Toast.makeText(MainActivity.this, "saved", Toast.LENGTH_SHORT).show();
+//            if (image != null) {
+//                mImageView.setImageBitmap(image);
+//                mImageView.setAlpha(156);
+//                mImageView.setVisibility(View.VISIBLE);
+//                Toast.makeText(MainActivity.this, "Matched", Toast.LENGTH_SHORT).show();
+//            } else {
+//                Toast.makeText(MainActivity.this, "saved", Toast.LENGTH_SHORT).show();
+//            }
         }
 
         @Override
