@@ -14,7 +14,7 @@ import android.util.Log;
 
 public class CameraView extends JavaCameraView implements PictureCallback {
     private static final String TAG = "Sample::Tutorial3View";
-    private MainActivity mMainActivity;
+    private CameraActivity mActivity;
     public CameraView(Context context, AttributeSet attrs) {
         super(context, attrs);
     }
@@ -52,8 +52,8 @@ public class CameraView extends JavaCameraView implements PictureCallback {
         return mCamera.getParameters().getPreviewSize();
     }
 
-    public void setMainActivity(MainActivity activity) {
-        mMainActivity = activity;
+    public void setCameraActivity(CameraActivity activity) {
+        mActivity = activity;
     }
     public void takePicture() {
         Log.i(TAG, "Taking picture");
@@ -72,8 +72,6 @@ public class CameraView extends JavaCameraView implements PictureCallback {
         mCamera.startPreview();
         mCamera.setPreviewCallback(this);
 
-        mMainActivity.showMatchedImage(data);
-
-
+        mActivity.showMatchedImage(data);
     }
 }

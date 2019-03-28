@@ -1,60 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent" >
+    android:layout_height="match_parent"
+    android:orientation="vertical">
 
-    <com.anna.picturematching.CameraView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="gone"
-        android:id="@+id/java_surface_view" />
     <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="0dp"
+        android:layout_weight="0.5">
 
-        <ImageButton
-            android:id="@+id/button_imageView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@null"
-            android:paddingLeft="134sp"
-            android:paddingTop="60sp"
-            android:paddingRight="134sp"
-            android:paddingBottom="60sp"
-            android:scaleType="centerCrop"
-            android:visibility="invisible" />
         <Button
-            android:id="@+id/button_capture"
-            android:background="@drawable/capture"
-            android:layout_width="72sp"
-            android:layout_height="60sp"
-            android:layout_marginRight="10dp"
-            android:layout_alignParentRight="true"
-            android:layout_centerVertical="true"
-            android:textColor="#FFFFFF"
-            android:textSize="30sp"
-            android:enabled="true"
-            />
-
-        <CheckBox
-            android:id="@+id/chk_match"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
-            android:layout_above="@id/button_capture"
-            android:checked="false"
-            android:layout_alignParentRight="true"
-            android:layout_marginRight="5dp"
-            android:layout_marginBottom="20dp" />
+            android:id="@+id/but_user1"
+            android:layout_width="80dp"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:layout_centerHorizontal="true"
+            android:layout_marginBottom="20dp"
+            android:text="User1" />
 
         <TextView
-            android:id="@+id/lb_match"
+            android:id="@+id/textView"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_above="@id/chk_match"
-            android:text="Taking"
-            android:layout_alignParentRight="true"
-            android:layout_marginRight="15dp"
-            android:layout_marginBottom="5dp" />
+            android:layout_centerHorizontal="true"
+            android:layout_above="@id/but_user1"
+            android:text="Image Matching for POC"
+            android:layout_marginBottom="100dp"
+            android:textSize="30sp" />
     </RelativeLayout>
-</RelativeLayout>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="0.5">
+
+        <Button
+            android:id="@+id/but_user2"
+            android:layout_width="80dp"
+            android:layout_height="wrap_content"
+            android:layout_alignParentTop="true"
+            android:layout_centerHorizontal="true"
+            android:layout_marginTop="20dp"
+            android:text="User2" />
+    </RelativeLayout>
+</LinearLayout>
